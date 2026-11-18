@@ -12,7 +12,12 @@ const {
   H,
   score,
   lives,
-  wave,
+  level,
+  levelName,
+  kills,
+  killTarget,
+  levels,
+  unlocked,
   best,
   status,
   weaponId,
@@ -20,6 +25,10 @@ const {
   weaponTime,
   pickupTip,
   startGame,
+  startLevel,
+  retryLevel,
+  nextLevel,
+  backToMenu,
   togglePause,
   bindCanvas,
   onStagePointerDown,
@@ -33,7 +42,10 @@ const {
     <div class="frame">
       <GameHud
         :score="score"
-        :wave="wave"
+        :level="level"
+        :level-name="levelName"
+        :kills="kills"
+        :kill-target="killTarget"
         :lives="lives"
         :weapon-name="weaponName"
         :weapon-time="weaponTime"
@@ -46,9 +58,17 @@ const {
         :status="status"
         :score="score"
         :best="best"
+        :level="level"
+        :level-name="levelName"
+        :levels="levels"
+        :unlocked="unlocked"
         :pickup-tip="pickupTip"
         @ready="bindCanvas"
         @start="startGame"
+        @start-level="startLevel"
+        @retry="retryLevel"
+        @next="nextLevel"
+        @menu="backToMenu"
         @toggle-pause="togglePause"
         @pointer-down="onStagePointerDown"
         @pointer-move="onStagePointerMove"

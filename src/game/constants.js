@@ -14,34 +14,10 @@ export const PLAYER = {
   lives: 3,
 }
 
-/**
- * 难度曲线：波次越高，敌人越快、刷得越密
- * speedMul / spawn 会随 wave 平滑上升
- */
-export const DIFFICULTY = {
-  /** 第 1 波基础速度 */
-  baseSpeed: 42,
-  /** 每波额外速度 */
-  speedPerWave: 11,
-  /** 速度随机浮动 */
-  speedJitter: 22,
-  /** 初始刷怪间隔（秒） */
-  spawnStart: 1.35,
-  /** 最短刷怪间隔（秒） */
-  spawnMin: 0.28,
-  /** 每波缩短的刷怪间隔 */
-  spawnCutPerWave: 0.07,
-  /** 击杀多少分升一波（大约） */
-  scorePerWave: 140,
-}
-
-/** 道具掉落概率（击杀时判定） */
+/** 道具下落等通用掉落参数 */
 export const DROP = {
-  /** 基础掉落率 */
+  /** 默认掉落率（关卡可覆盖） */
   baseChance: 0.12,
-  /** 每波额外掉落率，有上限 */
-  chancePerWave: 0.015,
-  maxChance: 0.38,
   /** 道具下落速度 */
   fallSpeed: 95,
 }

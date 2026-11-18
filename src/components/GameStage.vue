@@ -1,8 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import LevelSelect from './LevelSelect.vue'
 
 /**
- * 游戏舞台：画布、触控、菜单/暂停/结束遮罩
+ * 游戏舞台：画布、触控、菜单/关卡/通关遮罩
  */
 defineProps({
   W: { type: Number, required: true },
@@ -10,11 +11,19 @@ defineProps({
   status: { type: String, required: true },
   score: { type: Number, required: true },
   best: { type: Number, required: true },
+  level: { type: Number, required: true },
+  levelName: { type: String, required: true },
+  levels: { type: Array, required: true },
+  unlocked: { type: Number, required: true },
   pickupTip: { type: String, default: '' },
 })
 
 const emit = defineEmits([
   'start',
+  'start-level',
+  'retry',
+  'next',
+  'menu',
   'toggle-pause',
   'pointer-down',
   'pointer-move',
@@ -25,7 +34,6 @@ const emit = defineEmits([
 const canvasEl = ref(null)
 
 onMounted(() => {
-  // 把画布节点交给父级，用于绑定 2D 上下文
   emit('ready', canvasEl.value)
 })
 </script>
@@ -52,12 +60,13 @@ onMounted(() => {
       暂停
     </button>
 
-    <div v-if="status === 'menu'" class="overlay">
+    <!-- 主菜单 + 选关 -->
+    <div v-if="status === 'menu'" class="overlay menu">
       <p class="brand">星际射击</p>
-      <p class="tag">敌人会越来越快，记得捡道具强化武器</p>
-      <button class="btn" @click="emit('start')">开始游戏</button>
-      <p class="hint">电脑：WASD / 方向键移动 · 空格射击</p>
-      <p class="hint">手机：拖动飞行 · 自动开火</p>
+      <p class="tag">共 10 关，击杀达标即可通关；敌人越往后越快</p>
+      <button class="btn" @click="emit('start')">继续挑战</button>
+      <LevelSelect :levels="levels" :unlocked="unlocked" @pick="emit('start-level', $event)" />
+      <p class="hint">电脑：WASD 移动 · 空格射击 · 手机拖动自动开火</p>
       <p class="hint">道具：散=散弹 · 速=速射 · 重=重型双炮</p>
       <p v-if="best" class="best">最高分 {{ best }}</p>
     </div>
@@ -65,13 +74,31 @@ onMounted(() => {
     <div v-else-if="status === 'paused'" class="overlay dim">
       <p class="title">已暂停</p>
       <button class="btn" @click="emit('toggle-pause')">继续</button>
+      <button class="btn ghost" @click="emit('menu')">返回选关</button>
+    </div>
+
+    <div v-else-if="status === 'clear'" class="overlay">
+      <p class="title">第 {{ level }} 关通过</p>
+      <p class="tag">{{ levelName }}</p>
+      <p class="scoreline">当前总分 <strong>{{ score }}</strong></p>
+      <button class="btn" @click="emit('next')">下一关</button>
+      <button class="btn ghost" @click="emit('menu')">返回选关</button>
+    </div>
+
+    <div v-else-if="status === 'win'" class="overlay">
+      <p class="title">全部通关！</p>
+      <p class="tag">你征服了全部 10 个关卡</p>
+      <p class="scoreline">最终得分 <strong>{{ score }}</strong></p>
+      <p class="best">最高分 {{ best }}</p>
+      <button class="btn" @click="emit('menu')">返回选关</button>
     </div>
 
     <div v-else-if="status === 'over'" class="overlay">
-      <p class="title">游戏结束</p>
+      <p class="title">挑战失败</p>
+      <p class="tag">倒在第 {{ level }} 关 · {{ levelName }}</p>
       <p class="scoreline">本局得分 <strong>{{ score }}</strong></p>
-      <p class="best">最高分 {{ best }}</p>
-      <button class="btn" @click="emit('start')">再来一局</button>
+      <button class="btn" @click="emit('retry')">重试本关</button>
+      <button class="btn ghost" @click="emit('menu')">返回选关</button>
     </div>
   </div>
 </template>
@@ -136,11 +163,17 @@ canvas {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 24px;
+  padding: 20px 16px;
   text-align: center;
   background: rgba(6, 10, 18, 0.72);
   backdrop-filter: blur(3px);
   z-index: 4;
+}
+
+.overlay.menu {
+  justify-content: flex-start;
+  padding-top: 28px;
+  overflow: auto;
 }
 
 .overlay.dim {
@@ -148,7 +181,7 @@ canvas {
 }
 
 .brand {
-  font-size: clamp(28px, 9vw, 42px);
+  font-size: clamp(28px, 9vw, 40px);
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #f2fbff;
@@ -163,7 +196,7 @@ canvas {
 }
 
 .title {
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 700;
   letter-spacing: 0.06em;
 }
@@ -189,21 +222,22 @@ canvas {
 }
 
 .btn {
-  margin-top: 6px;
-  padding: 12px 28px;
+  margin-top: 2px;
+  padding: 11px 26px;
   border-radius: 999px;
   background: linear-gradient(180deg, #5ad4ff, #1f8fb8);
   color: #041018;
   font-weight: 700;
   letter-spacing: 0.06em;
   box-shadow: 0 8px 24px rgba(40, 160, 210, 0.35);
-  transition: transform 0.15s ease, filter 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
-.btn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.08);
+.btn.ghost {
+  background: transparent;
+  color: rgba(210, 230, 245, 0.85);
+  border: 1px solid rgba(150, 200, 230, 0.3);
+  box-shadow: none;
 }
 
 .btn:active {

@@ -1,17 +1,16 @@
-import { DIFFICULTY, DROP, H, W } from './constants.js'
+import { DROP, H, W } from './constants.js'
 import { POWERUP_TYPES } from './weapons.js'
 
 /**
- * 生成一名敌人
- * 波次越高：速度越快、血量分层越多
+ * 按当前关卡配置生成敌人
+ * @param {object} level 关卡配置（见 levels.js）
  */
-export function createEnemy(wave) {
-  const tier = Math.min(4, 1 + Math.floor((wave - 1) / 2))
+export function createEnemy(level) {
+  const maxTier = level.maxTier || 1
+  // 同关内随机一点血量，但不超过本关上限
+  const tier = 1 + Math.floor(Math.random() * maxTier)
   const size = 20 + Math.random() * 16 + tier * 2
-  const speed =
-    DIFFICULTY.baseSpeed +
-    wave * DIFFICULTY.speedPerWave +
-    Math.random() * DIFFICULTY.speedJitter
+  const speed = level.speed + Math.random() * 24
 
   return {
     x: 30 + Math.random() * (W - 60),
@@ -21,25 +20,17 @@ export function createEnemy(wave) {
     hp: tier,
     maxHp: tier,
     speed,
-    drift: (Math.random() - 0.5) * (30 + wave * 4),
+    drift: (Math.random() - 0.5) * (28 + level.id * 5),
     kind: Math.min(3, tier),
   }
 }
 
-/** 当前波次的刷怪间隔（秒） */
-export function spawnInterval(wave) {
-  return Math.max(
-    DIFFICULTY.spawnMin,
-    DIFFICULTY.spawnStart - (wave - 1) * DIFFICULTY.spawnCutPerWave,
-  )
-}
-
 /**
- * 击杀后有概率掉落道具
+ * 击杀后按关卡掉落率生成道具
  * @returns {object|null}
  */
-export function maybeDropPowerup(enemy, wave) {
-  const chance = Math.min(DROP.maxChance, DROP.baseChance + (wave - 1) * DROP.chancePerWave)
+export function maybeDropPowerup(enemy, level) {
+  const chance = level.dropChance ?? DROP.baseChance
   if (Math.random() > chance) return null
 
   const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)]
