@@ -117,34 +117,95 @@ function drawShip(ctx, x, y, weaponId = 'normal') {
   ctx.restore()
 }
 
+/** 敌人：下落小蜜蜂（kind 不同颜色条纹） */
 function drawEnemy(ctx, e) {
   ctx.save()
   ctx.translate(e.x, e.y)
+
   const colors = {
     1: ['#ff8a5c', '#c44b2b'],
     2: ['#ffd166', '#c48a1a'],
     3: ['#ff5e7a', '#a01d3a'],
   }
   const [c1, c2] = colors[e.kind] || colors[1]
-  ctx.fillStyle = c2
+  const s = Math.max(e.w, e.h) / 28
+  const t = performance.now() / 160 + e.x * 0.02
+  const flap = Math.sin(t * 3) * 0.4
+
+  ctx.save()
+  ctx.scale(s, s)
+
+  // 翅膀
+  ctx.save()
+  ctx.translate(-6, -1)
+  ctx.rotate(-0.5 + flap)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
   ctx.beginPath()
-  ctx.moveTo(0, e.h / 2)
-  ctx.lineTo(e.w / 2, -e.h / 4)
-  ctx.lineTo(e.w / 4, -e.h / 2)
-  ctx.lineTo(-e.w / 4, -e.h / 2)
-  ctx.lineTo(-e.w / 2, -e.h / 4)
-  ctx.closePath()
+  ctx.ellipse(0, 0, 11, 6, 0, 0, Math.PI * 2)
   ctx.fill()
+  ctx.restore()
+
+  ctx.save()
+  ctx.translate(6, -1)
+  ctx.rotate(0.5 - flap)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+  ctx.beginPath()
+  ctx.ellipse(0, 0, 11, 6, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  // 身体
+  ctx.fillStyle = '#ffe082'
+  ctx.beginPath()
+  ctx.ellipse(0, 2, 9, 11, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // 条纹（按敌人等级变色）
+  ctx.fillStyle = c2
+  for (const y of [-3, 2, 7]) {
+    ctx.fillRect(-8, y, 16, 2.8)
+  }
+  ctx.fillStyle = c1
+  ctx.fillRect(-8, 2, 16, 1.5)
+
+  // 头朝下，更像下落
+  ctx.fillStyle = '#2b2110'
+  ctx.beginPath()
+  ctx.arc(0, 12, 5, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = '#2b2110'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(-2, 15)
+  ctx.quadraticCurveTo(-7, 22, -4, 20)
+  ctx.moveTo(2, 15)
+  ctx.quadraticCurveTo(7, 22, 4, 20)
+  ctx.stroke()
   ctx.fillStyle = c1
   ctx.beginPath()
-  ctx.arc(0, -2, e.w * 0.18, 0, Math.PI * 2)
+  ctx.arc(-4, 20, 1.8, 0, Math.PI * 2)
+  ctx.arc(4, 20, 1.8, 0, Math.PI * 2)
   ctx.fill()
+
+  ctx.fillStyle = '#fff'
+  ctx.beginPath()
+  ctx.arc(-1.8, 12.2, 1.3, 0, Math.PI * 2)
+  ctx.arc(1.8, 12.2, 1.3, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#111'
+  ctx.beginPath()
+  ctx.arc(-1.8, 12.5, 0.55, 0, Math.PI * 2)
+  ctx.arc(1.8, 12.5, 0.55, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore() // 结束 scale
+
   if (e.maxHp > 1) {
     const ratio = e.hp / e.maxHp
     ctx.fillStyle = 'rgba(0,0,0,0.35)'
-    ctx.fillRect(-e.w / 3, e.h / 2 + 4, (e.w * 2) / 3, 3)
+    ctx.fillRect(-e.w / 3, e.h / 2 + 6, (e.w * 2) / 3, 3)
     ctx.fillStyle = '#7ee8ff'
-    ctx.fillRect(-e.w / 3, e.h / 2 + 4, ((e.w * 2) / 3) * ratio, 3)
+    ctx.fillRect(-e.w / 3, e.h / 2 + 6, ((e.w * 2) / 3) * ratio, 3)
   }
   ctx.restore()
 }
@@ -152,7 +213,6 @@ function drawEnemy(ctx, e) {
 function drawPowerup(ctx, p) {
   ctx.save()
   ctx.translate(p.x, p.y)
-  // 外圈脉冲
   ctx.strokeStyle = p.color
   ctx.globalAlpha = 0.35 + Math.sin(performance.now() / 140) * 0.2
   ctx.lineWidth = 2
