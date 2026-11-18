@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 const W = 480
 const H = 720
@@ -10,9 +10,7 @@ const lives = ref(3)
 const wave = ref(1)
 const best = ref(Number(localStorage.getItem('shooter-best') || 0))
 const status = ref('menu') // menu | playing | paused | over
-const touch = reactive({ left: false, right: false, fire: false })
-
-const showTouch = computed(() => status.value === 'playing' || status.value === 'paused')
+const touchMode = ref(false)
 
 let ctx = null
 let raf = 0
@@ -26,6 +24,8 @@ let bullets = []
 let enemies = []
 let keys = Object.create(null)
 let dragId = null
+let dragOffsetX = 0
+let dragOffsetY = 0
 
 const player = {
   x: W / 2,
@@ -33,6 +33,11 @@ const player = {
   w: 36,
   h: 40,
   speed: 320,
+}
+
+function clampPlayer() {
+  player.x = Math.max(player.w / 2 + 4, Math.min(W - player.w / 2 - 4, player.x))
+  player.y = Math.max(player.h / 2 + 4, Math.min(H - player.h / 2 - 4, player.y))
 }
 
 function resetGame() {
@@ -47,9 +52,6 @@ function resetGame() {
   particles = []
   player.x = W / 2
   player.y = H - 80
-  touch.left = false
-  touch.right = false
-  touch.fire = false
   dragId = null
   makeStars()
 }
@@ -85,9 +87,7 @@ function togglePause() {
 function gameOver() {
   status.value = 'over'
   cancelAnimationFrame(raf)
-  touch.left = false
-  touch.right = false
-  touch.fire = false
+  dragId = null
   if (score.value > best.value) {
     best.value = score.value
     localStorage.setItem('shooter-best', String(best.value))
@@ -147,58 +147,52 @@ function rectHit(a, b) {
   )
 }
 
-function canvasToGameX(clientX) {
+function clientToGame(clientX, clientY) {
   const canvas = canvasRef.value
-  if (!canvas) return player.x
+  if (!canvas) return { x: player.x, y: player.y }
   const rect = canvas.getBoundingClientRect()
-  const ratio = W / rect.width
-  return (clientX - rect.left) * ratio
+  return {
+    x: ((clientX - rect.left) / rect.width) * W,
+    y: ((clientY - rect.top) / rect.height) * H,
+  }
 }
 
-function movePlayerTo(clientX) {
+function movePlayerByPointer(clientX, clientY) {
   if (status.value !== 'playing') return
-  player.x = Math.max(
-    player.w / 2 + 4,
-    Math.min(W - player.w / 2 - 4, canvasToGameX(clientX)),
-  )
-}
-
-function setPad(dir, on) {
-  if (dir === 'left') touch.left = on
-  if (dir === 'right') touch.right = on
-  if (dir === 'fire') touch.fire = on
-}
-
-function onPadStart(dir, e) {
-  e.preventDefault()
-  setPad(dir, true)
-  if (dir === 'fire') shoot()
-}
-
-function onPadEnd(dir, e) {
-  e.preventDefault()
-  setPad(dir, false)
+  const pos = clientToGame(clientX, clientY)
+  player.x = pos.x - dragOffsetX
+  player.y = pos.y - dragOffsetY
+  clampPlayer()
 }
 
 function onStagePointerDown(e) {
   if (status.value !== 'playing') return
-  if (e.target.closest?.('.pad')) return
+  if (e.target.closest?.('.pause-btn')) return
+  if (e.pointerType === 'touch' || e.pointerType === 'pen') touchMode.value = true
   dragId = e.pointerId
   e.currentTarget.setPointerCapture?.(e.pointerId)
-  movePlayerTo(e.clientX)
-  touch.fire = true
-  shoot()
+  const pos = clientToGame(e.clientX, e.clientY)
+  // 手指按在飞船附近时保持相对偏移，避免飞船跳到手指正下方被挡住
+  const near =
+    Math.abs(pos.x - player.x) < player.w * 1.8 && Math.abs(pos.y - player.y) < player.h * 1.8
+  if (near) {
+    dragOffsetX = pos.x - player.x
+    dragOffsetY = pos.y - player.y
+  } else {
+    dragOffsetX = 0
+    dragOffsetY = player.h * 0.6
+  }
+  movePlayerByPointer(e.clientX, e.clientY)
 }
 
 function onStagePointerMove(e) {
   if (dragId !== e.pointerId || status.value !== 'playing') return
-  movePlayerTo(e.clientX)
+  movePlayerByPointer(e.clientX, e.clientY)
 }
 
 function onStagePointerUp(e) {
   if (dragId !== e.pointerId) return
   dragId = null
-  touch.fire = false
 }
 
 function update(dt) {
@@ -210,15 +204,24 @@ function update(dt) {
     }
   }
 
-  let dx = 0
-  if (keys.ArrowLeft || keys.a || keys.A || touch.left) dx -= 1
-  if (keys.ArrowRight || keys.d || keys.D || touch.right) dx += 1
+  // 键盘移动（电脑）；触屏拖动时不抢控制
   if (dragId === null) {
-    player.x += dx * player.speed * dt
-    player.x = Math.max(player.w / 2 + 4, Math.min(W - player.w / 2 - 4, player.x))
+    let dx = 0
+    let dy = 0
+    if (keys.ArrowLeft || keys.a || keys.A) dx -= 1
+    if (keys.ArrowRight || keys.d || keys.D) dx += 1
+    if (keys.ArrowUp || keys.w || keys.W) dy -= 1
+    if (keys.ArrowDown || keys.s || keys.S) dy += 1
+    if (dx || dy) {
+      const len = Math.hypot(dx, dy) || 1
+      player.x += (dx / len) * player.speed * dt
+      player.y += (dy / len) * player.speed * dt
+      clampPlayer()
+    }
   }
 
-  if (keys[' '] || keys.Space || touch.fire) shoot()
+  // 手机模式自动开火；电脑仍用空格
+  if (touchMode.value || keys[' '] || keys.Space) shoot()
   shootCooldown = Math.max(0, shootCooldown - dt)
   flash = Math.max(0, flash - dt)
 
@@ -448,6 +451,7 @@ onMounted(() => {
   ctx = canvas.getContext('2d')
   canvas.width = W
   canvas.height = H
+  touchMode.value = window.matchMedia('(pointer: coarse)').matches
   makeStars()
   draw()
   window.addEventListener('keydown', onKeyDown)
@@ -490,44 +494,6 @@ onUnmounted(() => {
       >
         <canvas ref="canvasRef" :width="W" :height="H"></canvas>
 
-        <div v-if="showTouch" class="controls" @pointerdown.stop>
-          <div class="pad-group">
-            <button
-              class="pad"
-              :class="{ on: touch.left }"
-              aria-label="向左"
-              @pointerdown="onPadStart('left', $event)"
-              @pointerup="onPadEnd('left', $event)"
-              @pointerleave="onPadEnd('left', $event)"
-              @pointercancel="onPadEnd('left', $event)"
-            >
-              ◀
-            </button>
-            <button
-              class="pad"
-              :class="{ on: touch.right }"
-              aria-label="向右"
-              @pointerdown="onPadStart('right', $event)"
-              @pointerup="onPadEnd('right', $event)"
-              @pointerleave="onPadEnd('right', $event)"
-              @pointercancel="onPadEnd('right', $event)"
-            >
-              ▶
-            </button>
-          </div>
-          <button
-            class="pad fire"
-            :class="{ on: touch.fire }"
-            aria-label="射击"
-            @pointerdown="onPadStart('fire', $event)"
-            @pointerup="onPadEnd('fire', $event)"
-            @pointerleave="onPadEnd('fire', $event)"
-            @pointercancel="onPadEnd('fire', $event)"
-          >
-            开火
-          </button>
-        </div>
-
         <button
           v-if="status === 'playing'"
           class="pause-btn"
@@ -542,8 +508,8 @@ onUnmounted(() => {
           <p class="brand">星际射击</p>
           <p class="tag">电脑键盘或手机触屏都能玩，清掉来袭的敌机</p>
           <button class="btn" @click="startGame">开始游戏</button>
-          <p class="hint">电脑：← → 移动 · 空格射击</p>
-          <p class="hint">手机：按住左右键，或手指拖飞船；点开火射击</p>
+          <p class="hint">电脑：方向键 / WASD 移动 · 空格射击</p>
+          <p class="hint">手机：拖动屏幕上下左右飞 · 自动开火</p>
           <p v-if="best" class="best">最高分 {{ best }}</p>
         </div>
 
@@ -647,59 +613,6 @@ canvas {
   touch-action: none;
 }
 
-.controls {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 14px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.pad-group {
-  display: flex;
-  gap: 10px;
-  pointer-events: auto;
-}
-
-.pad {
-  pointer-events: auto;
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  background: rgba(12, 24, 36, 0.55);
-  border: 1px solid rgba(150, 210, 240, 0.28);
-  color: #d8f3ff;
-  font-size: 22px;
-  font-weight: 700;
-  backdrop-filter: blur(4px);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: none;
-}
-
-.pad.on {
-  background: rgba(60, 160, 200, 0.45);
-  border-color: rgba(130, 220, 255, 0.7);
-}
-
-.pad.fire {
-  width: 78px;
-  height: 78px;
-  border-radius: 50%;
-  font-size: 15px;
-  letter-spacing: 0.08em;
-  background: rgba(180, 70, 50, 0.45);
-  border-color: rgba(255, 150, 120, 0.45);
-}
-
-.pad.fire.on {
-  background: rgba(230, 90, 60, 0.65);
-  border-color: rgba(255, 180, 140, 0.8);
-}
-
 .pause-btn {
   position: absolute;
   top: 10px;
@@ -796,16 +709,5 @@ canvas {
 
 .btn:active {
   transform: translateY(1px);
-}
-
-@media (min-width: 700px) {
-  .controls {
-    opacity: 0.35;
-  }
-
-  .controls:hover,
-  .pad.on {
-    opacity: 1;
-  }
 }
 </style>
